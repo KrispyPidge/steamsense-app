@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View, Image, Pressable, ActivityIndicator } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import { useAuth } from '../store/auth';
 
 const API_URL = 'https://steamsense-api-production.up.railway.app';
@@ -13,22 +12,26 @@ export default function HomeScreen() {
     restore();
   }, []);
 
-  const handleLogin = async () => {
-    const redirectUri = AuthSession.makeRedirectUri();
-    const authUrl = `${API_URL}/auth/steam?redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-    if (result.type === 'success' && result.url) {
-      const url = new URL(result.url);
+  // Listen for deep link redirects from Steam auth
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', async (event) => {
+      const url = new URL(event.url);
       const tokenParam = url.searchParams.get('token');
       const userParam = url.searchParams.get('user');
-
       if (tokenParam && userParam) {
-        const userData = JSON.parse(userParam);
-        await login(tokenParam, userData);
+        await login(tokenParam, JSON.parse(userParam));
       }
-    }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const handleLogin = async () => {
+    // Use Linking.createURL to build a redirect URI that works in Expo Go
+    const redirectUri = Linking.createURL('auth');
+    const authUrl = `${API_URL}/auth/steam?redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+    // Open in system browser — survives Steam Guard app switching
+    await Linking.openURL(authUrl);
   };
 
   if (isLoading) {
